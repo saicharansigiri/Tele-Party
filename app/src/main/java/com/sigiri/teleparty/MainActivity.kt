@@ -20,8 +20,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             TelePartyTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Greeting(bro so now I have the
-                            name = "Android",
+                    Greeting(name = "Android",
                         modifier = Modifier.padding(innerPadding)
                     )
                 }
