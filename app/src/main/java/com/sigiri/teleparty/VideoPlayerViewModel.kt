@@ -1,4 +1,4 @@
-package com.sigiri.teleparty.viewmodel
+package com.sigiri.teleparty
 
 import android.content.Context
 import android.util.Log

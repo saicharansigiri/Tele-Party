@@ -1,4 +1,4 @@
-package com.sigiri.teleparty.ui.player
+package com.sigiri.teleparty.ui.screens
 
 import androidx.annotation.OptIn
 import androidx.compose.foundation.clickable
@@ -31,9 +31,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
-import com.sigiri.teleparty.viewmodel.VideoPlayerState
-import com.sigiri.teleparty.viewmodel.VideoPlayerViewModel
+import com.sigiri.teleparty.VideoPlayerState
+import com.sigiri.teleparty.VideoPlayerViewModel
 
 @OptIn(UnstableApi::class)
 @Composable
@@ -88,7 +89,7 @@ private fun VideoContent(
     resolutions: List<String>,
     isBuffering: Boolean,
     onResolutionSelected: (String) -> Unit,
-    player: androidx.media3.exoplayer.ExoPlayer
+    player: ExoPlayer
 ) {
     Column {
         if (resolutions.isNotEmpty()){
