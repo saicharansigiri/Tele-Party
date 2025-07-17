@@ -8,11 +8,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
 import com.sigiri.teleparty.ui.navigation.AppNavigation
 import com.sigiri.teleparty.ui.theme.TelePartyTheme
+import dagger.hilt.android.AndroidEntryPoint
 
 /**
  * Main activity for the TeleParty application
  * Hosts the navigation system and handles app-level setup
  */
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
