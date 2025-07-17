@@ -1,11 +1,13 @@
 package com.sigiri.teleparty.viewmodel
 
 import android.content.Context
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
+import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
@@ -15,7 +17,6 @@ import androidx.media3.exoplayer.source.TrackGroupArray
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -30,6 +31,8 @@ import javax.inject.Inject
 class VideoPlayerViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
+
+    val isBuffering = MutableStateFlow(false)
 
     private val _uiState: MutableStateFlow<VideoPlayerState> =
         MutableStateFlow(VideoPlayerState.Loading)
@@ -52,6 +55,12 @@ class VideoPlayerViewModel @Inject constructor(
             manifestUrl = "https://bitmovin-a.akamaihd.net/content/art-of-motion_drm/mpds/11331.mpd",
             licenseUrl = "https://cwip-shaka-proxy.appspot.com/no_auth"
         )
+
+        player.addListener(object : Player.Listener {
+            override fun onPlaybackStateChanged(state: Int) {
+                isBuffering.value = state == Player.STATE_BUFFERING
+            }
+        })
     }
 
     fun loadVideo(manifestUrl: String, licenseUrl: String) {
@@ -75,10 +84,13 @@ class VideoPlayerViewModel @Inject constructor(
                 player.setMediaSource(mediaSource)
                 player.prepare()
 
-                delay(1500) // Let player buffer and parse tracks
-
                 val tracks = extractVideoTracks()
-                _uiState.value = VideoPlayerState.Success(tracks)
+                val aspectRatio = tracks.firstOrNull()?.let { it.width.toFloat() / it.height } ?: (16f / 9f)
+                _uiState.value = VideoPlayerState.Success(
+                    availableTracks = tracks,
+                    aspectRatio = aspectRatio
+                )
+                Log.d("VideoPlayerViewModel", "Video loaded successfully $tracks $aspectRatio")
 
             } catch (e: Exception) {
                 _uiState.value = VideoPlayerState.Error(e.message ?: "Unknown error")
@@ -134,6 +146,10 @@ data class VideoTrack(
 
 sealed class VideoPlayerState {
     object Loading : VideoPlayerState()
-    data class Success(val availableTracks: List<VideoTrack>) : VideoPlayerState()
+    data class Success(
+        val availableTracks: List<VideoTrack>,
+        val aspectRatio: Float = 16f / 9f,
+    ) : VideoPlayerState()
+
     data class Error(val message: String) : VideoPlayerState()
 }

@@ -24,6 +24,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
@@ -34,20 +35,17 @@ import androidx.media3.ui.PlayerView
 import com.sigiri.teleparty.viewmodel.VideoPlayerState
 import com.sigiri.teleparty.viewmodel.VideoPlayerViewModel
 
-/**
- * Screen for the DRM Video Player feature
- */
 @OptIn(UnstableApi::class)
 @Composable
 fun PlayerScreen(viewModel: VideoPlayerViewModel = hiltViewModel()) {
+    val uiState by viewModel.uiState.collectAsState()
+    val isBuffering by viewModel.isBuffering.collectAsState()
 
-    val state by viewModel.uiState.collectAsState()
-
-    Scaffold { padding ->
+    Scaffold { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
+                .padding(paddingValues)
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
@@ -56,45 +54,26 @@ fun PlayerScreen(viewModel: VideoPlayerViewModel = hiltViewModel()) {
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(bottomStart = 8.dp, bottomEnd = 8.dp))
             ) {
-                when (state) {
+                when (val state = uiState) {
                     is VideoPlayerState.Loading -> {
-                        CircularProgressIndicator()
+                        FullScreenLoader()
                     }
 
                     is VideoPlayerState.Error -> {
-                        val message = (state as VideoPlayerState.Error).message
-                        Text(
-                            text = "Error: $message",
-                            modifier = Modifier.padding(16.dp)
-                        )
+                        ErrorMessage(message = state.message)
                     }
 
                     is VideoPlayerState.Success -> {
-                        val resolutions = (state as VideoPlayerState.Success).availableTracks
-
-                        Column {
-                            ResolutionDropdown(
-                                resolutions = resolutions.map { "${it.height}p" },
-                                onSelected = { resStr ->
-                                    val height = resStr.removeSuffix("p").toIntOrNull()
-                                    height?.let { viewModel.selectTrackByHeight(it) }
-                                }
-                            )
-
-                            AndroidView(
-                                factory = { context ->
-                                    PlayerView(context).apply {
-                                        player = viewModel.player
-                                        useController = true
-
-                                    }
-                                },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .aspectRatio(16f/9f)
-                                    .padding(top = 8.dp)
-                            )
-                        }
+                        VideoContent(
+                            aspectRatio = state.aspectRatio,
+                            resolutions = state.availableTracks.map { "${it.height}p" },
+                            isBuffering = isBuffering,
+                            onResolutionSelected = { resStr ->
+                                val height = resStr.removeSuffix("p").toIntOrNull()
+                                height?.let { viewModel.selectTrackByHeight(it) }
+                            },
+                            player = viewModel.player
+                        )
                     }
                 }
             }
@@ -103,6 +82,51 @@ fun PlayerScreen(viewModel: VideoPlayerViewModel = hiltViewModel()) {
 }
 
 
+@Composable
+private fun VideoContent(
+    aspectRatio: Float,
+    resolutions: List<String>,
+    isBuffering: Boolean,
+    onResolutionSelected: (String) -> Unit,
+    player: androidx.media3.exoplayer.ExoPlayer
+) {
+    Column {
+        if (resolutions.isNotEmpty()){
+            ResolutionDropdown(
+                resolutions = resolutions,
+                onSelected = onResolutionSelected
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(aspectRatio)
+                .padding(top = 8.dp)
+        ) {
+            AndroidView(
+                factory = { context ->
+                    PlayerView(context).apply {
+                        this.player = player
+                        useController = true
+                    }
+                },
+                modifier = Modifier.matchParentSize()
+            )
+
+            if (isBuffering) {
+                Box(
+                    modifier = Modifier
+                        .matchParentSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+            }
+        }
+    }
+}
+
 
 @Composable
 fun ResolutionDropdown(
@@ -110,7 +134,7 @@ fun ResolutionDropdown(
     onSelected: (String) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
-    var selected by remember { mutableStateOf(resolutions.firstOrNull() ?: "") }
+    var selected by remember { mutableStateOf(resolutions.firstOrNull().orEmpty()) }
 
     Box(Modifier.fillMaxWidth().padding(8.dp)) {
         Text(
@@ -120,6 +144,7 @@ fun ResolutionDropdown(
                 .clickable { expanded = true }
                 .padding(12.dp)
         )
+
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             resolutions.forEach { res ->
                 DropdownMenuItem(
@@ -133,4 +158,26 @@ fun ResolutionDropdown(
             }
         }
     }
+}
+
+@Composable
+private fun FullScreenLoader() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(16f / 9f),
+        contentAlignment = Alignment.Center
+    ) {
+        CircularProgressIndicator()
+    }
+}
+
+@Composable
+private fun ErrorMessage(message: String) {
+    Text(
+        text = "Error: $message",
+        modifier = Modifier
+            .padding(16.dp)
+            .fillMaxWidth()
+    )
 }
