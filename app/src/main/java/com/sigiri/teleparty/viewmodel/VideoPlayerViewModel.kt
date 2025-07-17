@@ -17,26 +17,24 @@ import androidx.media3.exoplayer.source.TrackGroupArray
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/**
- * ViewModel for the DRM Video Player feature
- */
 @UnstableApi
 @HiltViewModel
 class VideoPlayerViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
-    val isBuffering = MutableStateFlow(false)
-
-    private val _uiState: MutableStateFlow<VideoPlayerState> =
-        MutableStateFlow(VideoPlayerState.Loading)
+    private val _uiState = MutableStateFlow<VideoPlayerState>(VideoPlayerState.Loading)
     val uiState: StateFlow<VideoPlayerState> = _uiState.asStateFlow()
+
+    private val _isBuffering = MutableStateFlow(false)
+    val isBuffering: StateFlow<Boolean> = _isBuffering.asStateFlow()
 
     private val trackSelector = DefaultTrackSelector(context).apply {
         setParameters(buildUponParameters().setForceHighestSupportedBitrate(true))
@@ -48,6 +46,12 @@ class VideoPlayerViewModel @Inject constructor(
         .build().apply {
             playWhenReady = true
             repeatMode = ExoPlayer.REPEAT_MODE_OFF
+
+            addListener(object : Player.Listener {
+                override fun onPlaybackStateChanged(state: Int) {
+                    _isBuffering.value = (state == Player.STATE_BUFFERING)
+                }
+            })
         }
 
     init {
@@ -55,18 +59,14 @@ class VideoPlayerViewModel @Inject constructor(
             manifestUrl = "https://bitmovin-a.akamaihd.net/content/art-of-motion_drm/mpds/11331.mpd",
             licenseUrl = "https://cwip-shaka-proxy.appspot.com/no_auth"
         )
-
-        player.addListener(object : Player.Listener {
-            override fun onPlaybackStateChanged(state: Int) {
-                isBuffering.value = state == Player.STATE_BUFFERING
-            }
-        })
     }
 
     fun loadVideo(manifestUrl: String, licenseUrl: String) {
         viewModelScope.launch {
             try {
-                val drmConfiguration = MediaItem.DrmConfiguration.Builder(C.WIDEVINE_UUID)
+                Log.d(TAG, "Preparing media item for: $manifestUrl")
+
+                val drmConfig = MediaItem.DrmConfiguration.Builder(C.WIDEVINE_UUID)
                     .setLicenseUri(licenseUrl)
                     .setMultiSession(true)
                     .build()
@@ -74,45 +74,70 @@ class VideoPlayerViewModel @Inject constructor(
                 val mediaItem = MediaItem.Builder()
                     .setUri(manifestUrl)
                     .setMimeType(MimeTypes.APPLICATION_MPD)
-                    .setDrmConfiguration(drmConfiguration)
+                    .setDrmConfiguration(drmConfig)
                     .build()
 
-                val dataSourceFactory = DefaultHttpDataSource.Factory()
-                val mediaSource = DashMediaSource.Factory(dataSourceFactory)
+                val mediaSource = DashMediaSource.Factory(DefaultHttpDataSource.Factory())
                     .createMediaSource(mediaItem)
 
                 player.setMediaSource(mediaSource)
                 player.prepare()
 
-                val tracks = extractVideoTracks()
-                val aspectRatio = tracks.firstOrNull()?.let { it.width.toFloat() / it.height } ?: (16f / 9f)
+                // Delay to ensure track info is ready
+                delay(2000)
+
+                val videoTracks = extractVideoTracks()
+
+                if (videoTracks.isEmpty()) {
+                    Log.w(TAG, "No video tracks extracted. TrackInfo is null or empty.")
+                } else {
+                    Log.d(TAG, "Extracted ${videoTracks.size} video tracks")
+                }
+
+                val aspectRatio = videoTracks.firstOrNull()?.let {
+                    it.width.toFloat() / it.height
+                } ?: DEFAULT_ASPECT_RATIO
+
                 _uiState.value = VideoPlayerState.Success(
-                    availableTracks = tracks,
+                    availableTracks = videoTracks,
                     aspectRatio = aspectRatio
                 )
-                Log.d("VideoPlayerViewModel", "Video loaded successfully $tracks $aspectRatio")
 
             } catch (e: Exception) {
-                _uiState.value = VideoPlayerState.Error(e.message ?: "Unknown error")
+                Log.e(TAG, "Error loading video: ${e.message}", e)
+                _uiState.value = VideoPlayerState.Error("Playback failed: ${e.message}")
             }
         }
     }
 
-    private fun extractVideoTracks(): List<VideoTrack> {
-        val mappedTrackInfo = trackSelector.currentMappedTrackInfo ?: return emptyList()
+    fun selectTrackByHeight(targetHeight: Int) {
+        Log.d(TAG, "User selected resolution height: $targetHeight")
+        val params = trackSelector.buildUponParameters()
+            .setMaxVideoSize(Int.MAX_VALUE, targetHeight)
+            .build()
+        trackSelector.parameters = params
+    }
 
-        val videoTracks = mutableListOf<VideoTrack>()
+    private fun extractVideoTracks(): List<VideoTrack> {
+        val mappedTrackInfo = trackSelector.currentMappedTrackInfo
+        if (mappedTrackInfo == null) {
+            Log.w(TAG, "MappedTrackInfo is null. Cannot extract video tracks.")
+            return emptyList()
+        }
+
+        val tracks = mutableListOf<VideoTrack>()
 
         for (rendererIndex in 0 until mappedTrackInfo.rendererCount) {
             if (mappedTrackInfo.getRendererType(rendererIndex) != C.TRACK_TYPE_VIDEO) continue
 
             val trackGroups: TrackGroupArray = mappedTrackInfo.getTrackGroups(rendererIndex)
             for (groupIndex in 0 until trackGroups.length) {
-                val group = trackGroups.get(groupIndex)
+                val group = trackGroups[groupIndex]
                 for (trackIndex in 0 until group.length) {
                     val format = group.getFormat(trackIndex)
+                    if (format.height <= 0 || format.width <= 0) continue
 
-                    videoTracks.add(
+                    tracks.add(
                         VideoTrack(
                             id = "$rendererIndex-$groupIndex-$trackIndex",
                             height = format.height,
@@ -124,17 +149,22 @@ class VideoPlayerViewModel @Inject constructor(
             }
         }
 
-        return videoTracks.distinctBy { it.height }.sortedByDescending { it.height }
+        return tracks.distinctBy { it.height }.sortedByDescending { it.height }
     }
 
-    fun selectTrackByHeight(targetHeight: Int) {
-        val parameters = trackSelector.buildUponParameters()
-            .setMaxVideoSize(Int.MAX_VALUE, targetHeight)
-            .build()
-        trackSelector.parameters = parameters
+    override fun onCleared() {
+        super.onCleared()
+        Log.d(TAG, "Releasing player")
+        player.release()
     }
 
+    companion object {
+        private const val TAG = "VideoPlayerVM"
+        private const val DEFAULT_ASPECT_RATIO = 16f / 9f
+    }
 }
+
+// Models
 
 data class VideoTrack(
     val id: String,
@@ -143,12 +173,11 @@ data class VideoTrack(
     val bitrate: Int,
 )
 
-
 sealed class VideoPlayerState {
     object Loading : VideoPlayerState()
     data class Success(
         val availableTracks: List<VideoTrack>,
-        val aspectRatio: Float = 16f / 9f,
+        val aspectRatio: Float,
     ) : VideoPlayerState()
 
     data class Error(val message: String) : VideoPlayerState()
