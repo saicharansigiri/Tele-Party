@@ -49,7 +49,7 @@ class VideoPlayerViewModel @Inject constructor(
 
     init {
         loadVideo(
-            manifestUrl = "https://storage.googleapis.com/shaka-demo-assets/sintel-widevine/dash.mpd",
+            manifestUrl = "https://bitmovin-a.akamaihd.net/content/art-of-motion_drm/mpds/11331.mpd",
             licenseUrl = "https://cwip-shaka-proxy.appspot.com/no_auth"
         )
     }
