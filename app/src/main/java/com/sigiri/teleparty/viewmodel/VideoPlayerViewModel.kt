@@ -1,118 +1,139 @@
 package com.sigiri.teleparty.viewmodel
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.sigiri.teleparty.data.model.VideoMetadata
-import com.sigiri.teleparty.data.model.VideoTrack
-import com.sigiri.teleparty.data.repository.Resource
-import com.sigiri.teleparty.data.repository.VideoRepository
+import androidx.media3.common.C
+import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.dash.DashMediaSource
+import androidx.media3.exoplayer.source.TrackGroupArray
+import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
+import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 /**
  * ViewModel for the DRM Video Player feature
  */
-class VideoPlayerViewModel : ViewModel() {
-    
-    private val repository = VideoRepository.getInstance()
-    
-    // Current video ID
-    private val _currentVideoId = MutableStateFlow<String?>(null)
-    val currentVideoId: StateFlow<String?> = _currentVideoId
+@UnstableApi
+@HiltViewModel
+class VideoPlayerViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
+) : ViewModel() {
 
-    // Current video metadata
-    private val _currentVideo = MutableStateFlow<VideoMetadata?>(null)
-    val currentVideo: StateFlow<VideoMetadata?> = _currentVideo
+    private val _uiState: MutableStateFlow<VideoPlayerState> =
+        MutableStateFlow(VideoPlayerState.Loading)
+    val uiState: StateFlow<VideoPlayerState> = _uiState.asStateFlow()
 
-    // Stream URL for the current video
-    private val _streamUrl = MutableStateFlow<String?>(null)
-    val streamUrl: StateFlow<String?> = _streamUrl
-
-    // Available video tracks
-    private val _availableTracks = MutableStateFlow<List<VideoTrack>>(emptyList())
-    val availableTracks: StateFlow<List<VideoTrack>> = _availableTracks
-
-    // Currently selected track/resolution
-    private val _selectedTrack = MutableStateFlow<VideoTrack?>(null)
-    val selectedTrack: StateFlow<VideoTrack?> = _selectedTrack
-    
-    // Error state
-    private val _errorMessage = MutableStateFlow<String?>(null)
-    val errorMessage: StateFlow<String?> = _errorMessage
-    
-    // Loading state
-    private val _isLoading = MutableStateFlow(false)
-    val isLoading: StateFlow<Boolean> = _isLoading
-
-    /**
-     * Initialize with default video on startup
-     */
-    init {
-        loadVideo("video1") // Load Big Buck Bunny by default
+    private val trackSelector = DefaultTrackSelector(context).apply {
+        setParameters(buildUponParameters().setForceHighestSupportedBitrate(true))
     }
 
-    /**
-     * Load a video with the given ID
-     * @param videoId The ID of the video to load
-     */
-    fun loadVideo(videoId: String) {
-        _isLoading.value = true
-        _currentVideoId.value = videoId
-        _errorMessage.value = null
-        
+    val player: ExoPlayer = ExoPlayer.Builder(context)
+        .setTrackSelector(trackSelector)
+        .setLoadControl(DefaultLoadControl())
+        .build().apply {
+            playWhenReady = true
+            repeatMode = ExoPlayer.REPEAT_MODE_OFF
+        }
+
+    init {
+        loadVideo(
+            manifestUrl = "https://storage.googleapis.com/shaka-demo-assets/sintel-widevine/dash.mpd",
+            licenseUrl = "https://cwip-shaka-proxy.appspot.com/no_auth"
+        )
+    }
+
+    fun loadVideo(manifestUrl: String, licenseUrl: String) {
         viewModelScope.launch {
-            repository.getVideoMetadata(videoId).collect { resource ->
-                when (resource) {
-                    is Resource.Success -> {
-                        _currentVideo.value = resource.data
-                        _availableTracks.value = resource.data?.availableTracks ?: emptyList()
-                        
-                        // Select default resolution (720p)
-                        val defaultTrack = _availableTracks.value.find { it.resolution == "720p" } 
-                            ?: _availableTracks.value.firstOrNull()
-                        defaultTrack?.let { selectTrack(it) }
-                        
-                        _isLoading.value = false
-                    }
-                    is Resource.Error -> {
-                        _errorMessage.value = resource.message
-                        _isLoading.value = false
-                    }
-                    is Resource.Loading -> {
-                        // Already handled
-                    }
+            try {
+                val drmConfiguration = MediaItem.DrmConfiguration.Builder(C.WIDEVINE_UUID)
+                    .setLicenseUri(licenseUrl)
+                    .setMultiSession(true)
+                    .build()
+
+                val mediaItem = MediaItem.Builder()
+                    .setUri(manifestUrl)
+                    .setMimeType(MimeTypes.APPLICATION_MPD)
+                    .setDrmConfiguration(drmConfiguration)
+                    .build()
+
+                val dataSourceFactory = DefaultHttpDataSource.Factory()
+                val mediaSource = DashMediaSource.Factory(dataSourceFactory)
+                    .createMediaSource(mediaItem)
+
+                player.setMediaSource(mediaSource)
+                player.prepare()
+
+                delay(1500) // Let player buffer and parse tracks
+
+                val tracks = extractVideoTracks()
+                _uiState.value = VideoPlayerState.Success(tracks)
+
+            } catch (e: Exception) {
+                _uiState.value = VideoPlayerState.Error(e.message ?: "Unknown error")
+            }
+        }
+    }
+
+    private fun extractVideoTracks(): List<VideoTrack> {
+        val mappedTrackInfo = trackSelector.currentMappedTrackInfo ?: return emptyList()
+
+        val videoTracks = mutableListOf<VideoTrack>()
+
+        for (rendererIndex in 0 until mappedTrackInfo.rendererCount) {
+            if (mappedTrackInfo.getRendererType(rendererIndex) != C.TRACK_TYPE_VIDEO) continue
+
+            val trackGroups: TrackGroupArray = mappedTrackInfo.getTrackGroups(rendererIndex)
+            for (groupIndex in 0 until trackGroups.length) {
+                val group = trackGroups.get(groupIndex)
+                for (trackIndex in 0 until group.length) {
+                    val format = group.getFormat(trackIndex)
+
+                    videoTracks.add(
+                        VideoTrack(
+                            id = "$rendererIndex-$groupIndex-$trackIndex",
+                            height = format.height,
+                            width = format.width,
+                            bitrate = format.bitrate
+                        )
+                    )
                 }
             }
         }
+
+        return videoTracks.distinctBy { it.height }.sortedByDescending { it.height }
     }
 
-    /**
-     * Select a video track/resolution
-     * @param track The track to select
-     */
-    fun selectTrack(track: VideoTrack) {
-        _selectedTrack.value = track
-        _currentVideoId.value?.let { videoId ->
-            _streamUrl.value = repository.getVideoStreamUrl(videoId, track.resolution)
-        }
+    fun selectTrackByHeight(targetHeight: Int) {
+        val parameters = trackSelector.buildUponParameters()
+            .setMaxVideoSize(Int.MAX_VALUE, targetHeight)
+            .build()
+        trackSelector.parameters = parameters
     }
 
-    /**
-     * Reload the current video stream with the selected resolution
-     */
-    fun reloadStream() {
-        _currentVideoId.value?.let { videoId ->
-            _selectedTrack.value?.let { track ->
-                _streamUrl.value = repository.getVideoStreamUrl(videoId, track.resolution)
-            }
-        }
-    }
+}
 
-    /**
-     * Clear any error messages
-     */
-    fun clearError() {
-        _errorMessage.value = null
-    }
+data class VideoTrack(
+    val id: String,
+    val height: Int,
+    val width: Int,
+    val bitrate: Int,
+)
+
+
+sealed class VideoPlayerState {
+    object Loading : VideoPlayerState()
+    data class Success(val availableTracks: List<VideoTrack>) : VideoPlayerState()
+    data class Error(val message: String) : VideoPlayerState()
 }

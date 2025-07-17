@@ -3,7 +3,7 @@ package com.sigiri.teleparty.data.model
 /**
  * Model class representing video track options
  */
-data class VideoTrack(
+data class MetaVideoTrack(
     val id: String,
     val resolution: String,
     val bitrateKbps: Int,
@@ -21,7 +21,7 @@ data class VideoMetadata(
     val duration: Long,
     val genre: String?,
     val thumbnailUrl: String?,
-    val availableTracks: List<VideoTrack>
+    val availableTracks: List<MetaVideoTrack>
 )
 
 /**

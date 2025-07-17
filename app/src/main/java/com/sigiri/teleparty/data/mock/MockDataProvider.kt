@@ -1,7 +1,7 @@
 package com.sigiri.teleparty.data.mock
 
+import com.sigiri.teleparty.data.model.MetaVideoTrack
 import com.sigiri.teleparty.data.model.VideoMetadata
-import com.sigiri.teleparty.data.model.VideoTrack
 
 /**
  * Provider of mock data for testing and demonstration purposes
@@ -22,10 +22,10 @@ object MockDataProvider {
                 genre = "Animation",
                 thumbnailUrl = "https://peach.blender.org/wp-content/uploads/bbb-splash.png",
                 availableTracks = listOf(
-                    VideoTrack("240p", "240p", 500),
-                    VideoTrack("480p", "480p", 1500),
-                    VideoTrack("720p", "720p", 2500),
-                    VideoTrack("1080p", "1080p", 5000)
+                    MetaVideoTrack("240p", "240p", 500),
+                    MetaVideoTrack("480p", "480p", 1500),
+                    MetaVideoTrack("720p", "720p", 2500),
+                    MetaVideoTrack("1080p", "1080p", 5000)
                 )
             ),
             VideoMetadata(
@@ -37,10 +37,10 @@ object MockDataProvider {
                 genre = "Fantasy",
                 thumbnailUrl = "https://durian.blender.org/wp-content/uploads/2010/05/sintel_trailer_1080p.jpg",
                 availableTracks = listOf(
-                    VideoTrack("240p", "240p", 500),
-                    VideoTrack("480p", "480p", 1500),
-                    VideoTrack("720p", "720p", 2500),
-                    VideoTrack("1080p", "1080p", 5000)
+                    MetaVideoTrack("240p", "240p", 500),
+                    MetaVideoTrack("480p", "480p", 1500),
+                    MetaVideoTrack("720p", "720p", 2500),
+                    MetaVideoTrack("1080p", "1080p", 5000)
                 )
             ),
             VideoMetadata(
@@ -52,10 +52,10 @@ object MockDataProvider {
                 genre = "Sci-Fi",
                 thumbnailUrl = "https://mango.blender.org/wp-content/uploads/2012/09/tears_of_steel_poster.jpg",
                 availableTracks = listOf(
-                    VideoTrack("240p", "240p", 500),
-                    VideoTrack("480p", "480p", 1500),
-                    VideoTrack("720p", "720p", 2500),
-                    VideoTrack("1080p", "1080p", 5000)
+                    MetaVideoTrack("240p", "240p", 500),
+                    MetaVideoTrack("480p", "480p", 1500),
+                    MetaVideoTrack("720p", "720p", 2500),
+                    MetaVideoTrack("1080p", "1080p", 5000)
                 )
             )
         )
