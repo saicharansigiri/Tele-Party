@@ -1,3 +1,13 @@
+### 📽️ Task 1 Video Recording
+
+[Click here to watch Task 1](https://drive.google.com/file/d/14EPj9Y0_0saZ8Nf2-IE4-dqbKBvdO5ed/view?usp=sharing)
+
+
+### 📽️ Task 2 Demo Video Recording
+
+[Click here to watch Task 2](https://drive.google.com/file/d/1kaL3OYQasBVij-aHy7pARTLh8I2jgehv/view?usp=sharing)
+
+
 # TeleParty Implementation
 
 This repository contains the implementation of the **Teleparty Android developer assignment**, consisting of two main tasks:
@@ -32,6 +42,8 @@ The application implements a DRM-protected media player using Android's ExoPlaye
 
 - **State Management:**  
   Handles different states (loading, error, playback) through a dedicated `ViewModel`
+
+
 
 ---
 
