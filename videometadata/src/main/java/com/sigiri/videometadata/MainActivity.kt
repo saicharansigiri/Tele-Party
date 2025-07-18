@@ -51,11 +51,9 @@ fun MainScreen(viewModel: VideoViewModel = hiltViewModel()) {
 
     val knownVideos = remember {
         mapOf(
-            "Jab We Met" to "acb8b71b41fa86ace0e3e10d75e78e22",
-            "Housefull 2" to "f11cec31eff8ae5a0984017b3c252e02",
-            "Yamla Pagla Deewana" to "a3b53d8994a29b8cfae0e061427be565",
-            "The Monkey King 2" to "500f8c5e98bf9d06e109d8b880a76342",
-            "Anaconda 3" to "6f913706db4658ceb8443d9ef805f529"
+            "Pushpa: The Rise (Hindi)" to "c2dc7967b20d067c12227043915c9f84",
+            "Bholaa" to "048583d8c50235757c926f6b9dc75e6c",
+            "Ponniyin Selvan Part 2 (Hindi)" to "e7f35838b56bfd81c61be5448be4464b",
         )
     }
 
