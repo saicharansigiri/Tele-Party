@@ -1,5 +1,6 @@
 package com.sigiri.videometadata
 
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -16,6 +17,10 @@ class VideoViewModel @Inject constructor(
     private val repo: VideoRepository
 ) : ViewModel() {
 
+    companion object {
+        private const val TAG = "VideoViewModel"
+    }
+
     var uiState by mutableStateOf<UiState>(UiState.Idle)
         private set
 
@@ -27,6 +32,7 @@ class VideoViewModel @Inject constructor(
                 uiState = if (response.isSuccessful && response.body() != null) {
                     UiState.Success(response.body()!!)
                 } else {
+                    Log.e(TAG, "Failed: ${response.code()} ${response.message()}")
                     UiState.Error("Failed: ${response.code()} ${response.message()}")
                 }
             } catch (e: Exception) {

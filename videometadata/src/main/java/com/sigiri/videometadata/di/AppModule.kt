@@ -7,8 +7,12 @@ import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import okhttp3.Interceptor
+import okhttp3.OkHttpClient
+import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
 
 @Module
@@ -20,9 +24,42 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideRetrofit(baseUrl: String): Retrofit =
+    fun provideLoggingInterceptor(): HttpLoggingInterceptor =
+        HttpLoggingInterceptor().apply {
+            level = HttpLoggingInterceptor.Level.BODY // Log full request/response body
+        }
+
+    @Provides
+    @Singleton
+    fun provideUserAgentInterceptor(): Interceptor =
+        Interceptor { chain ->
+            val newRequest = chain.request().newBuilder()
+                .header("User-Agent", "Mozilla/5.0 (Android)")
+                .header("Accept", "application/json")
+                .header("Content-Type", "application/json")
+                .build()
+            chain.proceed(newRequest)
+        }
+
+    @Provides
+    @Singleton
+    fun provideOkHttpClient(
+        loggingInterceptor: HttpLoggingInterceptor,
+        userAgentInterceptor: Interceptor,
+    ): OkHttpClient =
+        OkHttpClient.Builder()
+            .addInterceptor(userAgentInterceptor)
+            .addInterceptor(loggingInterceptor)
+            .connectTimeout(5, TimeUnit.SECONDS)
+            .build()
+
+
+    @Provides
+    @Singleton
+    fun provideRetrofit(baseUrl: String, client: OkHttpClient): Retrofit =
         Retrofit.Builder()
             .baseUrl(baseUrl)
+            .client(client)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
 
