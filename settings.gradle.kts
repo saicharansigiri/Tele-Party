@@ -21,3 +21,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "TeleParty"
 include(":app")
+include(":videometadata")
